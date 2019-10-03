@@ -61,7 +61,8 @@ class PairPanicTableCouples : public Pair {
   Table *tables;
 
   int arg_wall = 14;        // Sticco 18 Jun 2018
-  double epsilon;                // Eric 09/04/19
+  double epsilon;                // Rozan 09/04/19
+  double xd;                // X Door // Rozan 02/09/19
 
   int **tabindex;
 

@@ -70,7 +70,7 @@ PairPanicTableCouples::~PairPanicTableCouples()
 void PairPanicTableCouples::compute(int eflag, int vflag)
 {
   int    i,j,ii,jj,inum,jnum,itype,jtype,itable;
-  double xtmp,ytmp,ztmp,vxtmp,vytmp,delx,dely,delz,evdwl,fpair,gpair,delvx,delvy;
+  double xtmp,ytmp,ztmp,vxtmp,vytmp,delx,dely,delz,evdwl,fpair,gpair,delvx,delvy, xj;
   double rsq,factor_lj,fraction,value,a,b;
   char   estr[128];
   int    *ilist,*jlist,*numneigh,**firstneigh;
@@ -120,90 +120,97 @@ void PairPanicTableCouples::compute(int eflag, int vflag)
       delvy = vytmp - v[j][1];   
       rsq = delx*delx + dely*dely;
       jtype = type[j];
+      xj = x[j][0];
 
   if ( (itype == jtype) && (itype > 1) )
-  {
-
-      if (rsq < cutsq[itype][jtype]) {
-        tb = &tables[tabindex[itype][jtype]];
-        if (rsq < tb->innersq) {
-          sprintf(estr,"Pair distance < table inner cutoff: " 
-                  "ijtype %d %d dist %g",itype,jtype,sqrt(rsq));
-          error->one(FLERR,estr);
-        }
-
-        if (tabstyle == LOOKUP) {
-          itable = static_cast<int> ((rsq - tb->innersq) * tb->invdelta);
-          if (itable >= tlm1) {
-            sprintf(estr,"Pair distance > table outer cutoff: " 
-                    "ijtype %d %d dist %g",itype,jtype,sqrt(rsq));
-            error->one(FLERR,estr);
-          }
-          fpair = factor_lj * tb->f[itable];
-        } else if (tabstyle == LINEAR) {
-          itable = static_cast<int> ((rsq - tb->innersq) * tb->invdelta);
-          if (itable >= tlm1) {
-            sprintf(estr,"Pair distance > table outer cutoff: " 
-                    "ijtype %d %d dist %g",itype,jtype,sqrt(rsq));
-            error->one(FLERR,estr);
-          }
-          fraction = (rsq - tb->rsq[itable]) * tb->invdelta;
-          value = tb->f[itable] + fraction*tb->df[itable];
-          //fpair = factor_lj * value;
-          fpair =  epsilon*factor_lj * value;		                             // Sticco 18 Jun 2018
-          value = tb->rsqt[itable] + fraction*tb->drsqt[itable];          // Sticco 18 Jun 2018
-          gpair = DIAM-value;                                             // Sticco 18 Jun 2018
-          if (gpair<0.0) gpair=0.0;                                       // Sticco 18 Jun 2018
+  {	
 
 
-        } else if (tabstyle == SPLINE) {
-          itable = static_cast<int> ((rsq - tb->innersq) * tb->invdelta);
-          if (itable >= tlm1) {
-            sprintf(estr,"Pair distance > table outer cutoff: " 
-                    "ijtype %d %d dist %g",itype,jtype,sqrt(rsq));
-            error->one(FLERR,estr);
-          }
-          b = (rsq - tb->rsq[itable]) * tb->invdelta;
-          a = 1.0 - b;
-          value = a * tb->f[itable] + b * tb->f[itable+1] +
-            ((a*a*a-a)*tb->f2[itable] + (b*b*b-b)*tb->f2[itable+1]) *
-            tb->deltasq6;
-          fpair = factor_lj * value;
-        } else {
-          rsq_lookup.f = rsq;
-          itable = rsq_lookup.i & tb->nmask;
-          itable >>= tb->nshiftbits;
-          fraction = (rsq_lookup.f - tb->rsq[itable]) * tb->drsq[itable];
-          value = tb->f[itable] + fraction*tb->df[itable];
-          fpair = factor_lj * value;
-        }
+		  	if (rsq < cutsq[itype][jtype]) {
+		  		tb = &tables[tabindex[itype][jtype]];
+		  		if (rsq < tb->innersq) {
+		  			sprintf(estr,"Pair distance < table inner cutoff: " 
+		  				"ijtype %d %d dist %g",itype,jtype,sqrt(rsq));
+		  			error->one(FLERR,estr);
+		  		}
 
-        attractx = delx*fpair;
-        attracty = dely*fpair;
+		  		if (tabstyle == LOOKUP) {
+		  			itable = static_cast<int> ((rsq - tb->innersq) * tb->invdelta);
+		  			if (itable >= tlm1) {
+		  				sprintf(estr,"Pair distance > table outer cutoff: " 
+		  					"ijtype %d %d dist %g",itype,jtype,sqrt(rsq));
+		  				error->one(FLERR,estr);
+		  			}
+		  			fpair = factor_lj * tb->f[itable];
+		  		} else if (tabstyle == LINEAR) {
+		  			itable = static_cast<int> ((rsq - tb->innersq) * tb->invdelta);
+		  			if (itable >= tlm1) {
+		  				sprintf(estr,"Pair distance > table outer cutoff: " 
+		  					"ijtype %d %d dist %g",itype,jtype,sqrt(rsq));
+		  				error->one(FLERR,estr);
+		  			}
+		  			fraction = (rsq - tb->rsq[itable]) * tb->invdelta;
+		  			value = tb->f[itable] + fraction*tb->df[itable];
+				          //fpair = factor_lj * value;
+				          fpair =  epsilon*factor_lj * value;		                      // Sticco 18 Jun 2018
+				          value = tb->rsqt[itable] + fraction*tb->drsqt[itable];          // Sticco 18 Jun 2018
+				          gpair = DIAM-value;                                             // Sticco 18 Jun 2018
+				          if (gpair<0.0) gpair=0.0;                                       // Sticco 18 Jun 2018
 
-        f[i][0] += attractx;                  // Eric 29/04/19
-        f[i][1] += attracty;                  
-        if (newton_pair || j < nlocal) {      
-           f[j][0] -= attractx;              
-           f[j][1] -= attracty; 
-        }
 
-        if (eflag) {
-          if (tabstyle == LOOKUP)
-            evdwl = tb->e[itable];
-          else if (tabstyle == LINEAR || tabstyle == BITMAP)
-            evdwl = tb->e[itable] + fraction*tb->de[itable];
-          else
-            evdwl = a * tb->e[itable] + b * tb->e[itable+1] +
-              ((a*a*a-a)*tb->e2[itable] + (b*b*b-b)*tb->e2[itable+1]) *
-              tb->deltasq6;
-          evdwl *= factor_lj;
-        }
+				      } else if (tabstyle == SPLINE) {
+				      	itable = static_cast<int> ((rsq - tb->innersq) * tb->invdelta);
+				      	if (itable >= tlm1) {
+				      		sprintf(estr,"Pair distance > table outer cutoff: " 
+				      			"ijtype %d %d dist %g",itype,jtype,sqrt(rsq));
+				      		error->one(FLERR,estr);
+				      	}
+				      	b = (rsq - tb->rsq[itable]) * tb->invdelta;
+				      	a = 1.0 - b;
+				      	value = a * tb->f[itable] + b * tb->f[itable+1] +
+				      	((a*a*a-a)*tb->f2[itable] + (b*b*b-b)*tb->f2[itable+1]) *
+				      	tb->deltasq6;
+				      	fpair = factor_lj * value;
+				      } else {
+				      	rsq_lookup.f = rsq;
+				      	itable = rsq_lookup.i & tb->nmask;
+				      	itable >>= tb->nshiftbits;
+				      	fraction = (rsq_lookup.f - tb->rsq[itable]) * tb->drsq[itable];
+				      	value = tb->f[itable] + fraction*tb->df[itable];
+				      	fpair = factor_lj * value;
+				      }
 
-        if (evflag) ev_tally(i,j,nlocal,newton_pair,
-                             evdwl,0.0,fpair,delx,dely,delz);
-      }
-    }
+				      attractx = delx*fpair;
+				      attracty = dely*fpair;
+                      if (xj<xd)                      // Rozan 02/10/19
+                    {
+				        f[i][0] += attractx;                  // Rozan 29/04/19
+				        f[i][1] += attracty;                  
+                    }
+				        if (newton_pair || j < nlocal) {      
+
+				        	f[j][0] -= attractx;              
+				        	f[j][1] -= attracty; 
+                    }
+
+				        if (eflag) {
+				        	if (tabstyle == LOOKUP)
+				        		evdwl = tb->e[itable];
+				        	else if (tabstyle == LINEAR || tabstyle == BITMAP)
+				        		evdwl = tb->e[itable] + fraction*tb->de[itable];
+				        	else
+				        		evdwl = a * tb->e[itable] + b * tb->e[itable+1] +
+				        	((a*a*a-a)*tb->e2[itable] + (b*b*b-b)*tb->e2[itable+1]) *
+				        	tb->deltasq6;
+				        	evdwl *= factor_lj;
+				        }
+
+				        if (evflag) ev_tally(i,j,nlocal,newton_pair,
+				        	evdwl,0.0,fpair,delx,dely,delz);
+				    }
+}  //ends if type i== type j
+
+
   }
     tb = &tables[tabindex[1][1]];  // Sticco 12 May - (only for one type of atoms!!!)
     }
@@ -238,7 +245,7 @@ void PairPanicTableCouples::allocate()
 void PairPanicTableCouples::settings(int narg, char **arg)
 {
 
-  if (narg < 3) error->all(FLERR,"Illegal pair_style command");
+  if (narg < 4) error->all(FLERR,"Illegal pair_style command");
 
   // new settings
 
@@ -255,7 +262,8 @@ void PairPanicTableCouples::settings(int narg, char **arg)
     // assert the tabulation is compatible with a specific long-range solver
 
   epsilon = atof(arg[2]);    
-  int iarg = 3;
+  xd = atof(arg[3]);    
+  int iarg = 4;
     while (iarg < narg) {
     if (strcmp(arg[iarg],"ewald") == 0) ewaldflag = 1;
     else if (strcmp(arg[iarg],"pppm") == 0) pppmflag = 1;
